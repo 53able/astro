@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,14 +45,26 @@ async function cleanGeneratedOutputs() {
     join(root, 'packages', 'astro-prism', 'dist'),
     join(root, 'packages', 'markdown', 'satteri', 'dist'),
   ];
-  const globs = await output(process.platform === 'win32' ? 'powershell' : 'find', process.platform === 'win32'
-    ? ['-NoProfile', '-Command', "Get-ChildItem -Recurse -Force -Include .tsbuildinfo,dist,'.ts-temp' | Where-Object { $_.FullName -notmatch 'node_modules' } | ForEach-Object { $_.FullName }"]
-    : ['.', '-name', 'node_modules', '-prune', '-o', '(', '-name', '.tsbuildinfo', '-o', '-name', 'dist', '-o', '-name', '.ts-temp', ')', '-print']);
-  for (const line of globs.split(/\r?\n/).filter(Boolean)) {
-    const abs = resolve(root, line);
-    if (keepPrefixes.some((prefix) => abs.startsWith(prefix))) continue;
-    await rm(abs, { recursive: true, force: true });
+  const targets = new Set(['.tsbuildinfo', 'dist', '.ts-temp']);
+  async function walk(dir) {
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name === 'node_modules' || entry.name === '.git') continue;
+      const abs = join(dir, entry.name);
+      if (keepPrefixes.some((prefix) => abs.startsWith(prefix))) continue;
+      if (targets.has(entry.name)) {
+        await rm(abs, { recursive: true, force: true });
+        continue;
+      }
+      if (entry.isDirectory()) await walk(abs);
+    }
   }
+  await walk(root);
 }
 
 async function sampleRss(pid) {
