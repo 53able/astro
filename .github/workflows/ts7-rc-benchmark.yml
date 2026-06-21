@@ -1,0 +1,93 @@
+name: TypeScript 7 RC benchmark
+
+on:
+  workflow_dispatch:
+
+jobs:
+  bench:
+    name: ${{ matrix.os }} ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: builders-1
+            args: --builders 1
+          - os: ubuntu-latest
+            label: builders-2
+            args: --builders 2
+          - os: ubuntu-latest
+            label: builders-4
+            args: --builders 4
+          - os: ubuntu-latest
+            label: builders-8
+            args: --builders 8
+          - os: ubuntu-latest
+            label: builders-4-checkers-2
+            args: --builders 4 --checkers 2
+          - os: ubuntu-latest
+            label: builders-4-checkers-4
+            args: --builders 4 --checkers 4
+          - os: ubuntu-latest
+            label: builders-4-checkers-8
+            args: --builders 4 --checkers 8
+          - os: windows-latest
+            label: builders-1
+            args: --builders 1
+          - os: windows-latest
+            label: builders-2
+            args: --builders 2
+          - os: windows-latest
+            label: builders-4
+            args: --builders 4
+          - os: windows-latest
+            label: builders-8
+            args: --builders 8
+          - os: windows-latest
+            label: builders-4-checkers-2
+            args: --builders 4 --checkers 2
+          - os: windows-latest
+            label: builders-4-checkers-4
+            args: --builders 4 --checkers 4
+          - os: windows-latest
+            label: builders-4-checkers-8
+            args: --builders 4 --checkers 8
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install benchmark TypeScript tools
+        shell: bash
+        run: |
+          mkdir -p .ts-bench-tools
+          cd .ts-bench-tools
+          printf '{"private":true,"type":"module"}\n' > package.json
+          npm install typescript@rc @typescript/typescript6
+
+      - name: Run benchmark
+        shell: bash
+        env:
+          BENCH_ITERATIONS: 3
+        run: node scripts/bench-ts7-rc.mjs ${{ matrix.args }}
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ts7-rc-${{ matrix.os }}-${{ matrix.label }}
+          path: bench-results/*.json
+          if-no-files-found: warn
